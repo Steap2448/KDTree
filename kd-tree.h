@@ -57,7 +57,7 @@ private:
 
 class SurfaceAreaHeuristic {
 public:
-    SurfaceAreaHeuristic(double ci, double ct) : ci_(ci), ct_(ct) {
+    SurfaceAreaHeuristic(double ci = 1, double ct = 2) : ci_(ci), ct_(ct) {
     }
 
     double operator()(double SAL, double SAR, double SAP, int NL, int NR) const;
