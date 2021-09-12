@@ -1,3 +1,6 @@
 .idea
 cmake-*
 main.cpp
+*.out
+*.gch
+.project

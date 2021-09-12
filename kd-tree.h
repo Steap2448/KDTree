@@ -23,6 +23,11 @@ public:
     }
 };
 
+enum class SplitType {
+    SAH,
+    Median
+};
+
 template<class Object>
 class KDTreeBuilder;
 
@@ -51,18 +56,22 @@ class KDTree {
 public:
     KDTree() = delete;
 
+    explicit KDTree(std::vector<Object>&& objects)
+    : objects_(std::move(objects)), root_(std::make_unique<TreeNode>(objects_)), dim_(Object::GetDimension()), k_(3) {
+    }
+
     KDTree(KDTree&& tree)
     : objects_(std::move(tree.objects_)), root_(tree.root_), dim_(tree.dim_), k_(tree.k_) {
     }
 
     bool SaveToFile(const std::string& filename) const;
 
-    const std::vector<Object*> SearchClosest(const Object& obj,
+    const std::vector<const Object*> SearchClosest(const Object& obj,
                                              const std::array<float, Object::GetDimension()>& eps) const {
         std::queue<TreeNode*> queue;
         queue.push(root_.get());
 
-        std::vector<Object*> result;
+        std::vector<const Object*> result;
         std::map<size_t, bool> registered_nodes;
 
         while(!queue.empty()) {
@@ -76,8 +85,8 @@ public:
                     }
                 }
             } else {
-                const TreeNode* left = current_node->GetLeft();
-                const TreeNode* right = current_node->GetRight();
+                TreeNode* left = current_node->GetLeft();
+                TreeNode* right = current_node->GetRight();
 
                 if (left->IsCovering(obj, eps)) {
                     queue.push(left);
@@ -96,25 +105,61 @@ public:
         }
 
         auto comp = [&obj](const Object* left, const Object* right) {
-            return left->DistanceTo(obj) < right->DistanceTo(obj);
+            return left->GetDistanceTo(obj) < right->GetDistanceTo(obj);
         };
         std::sort(result.begin(), result.end(), comp);
 
-        return result.resize(k_);
+        result.resize(k_);
+
+        return result;
     }
 
-    void SetK(int k) const;
+    void SetK(int k) {
+        k_ = k;
+    }
 
 private:
     struct TreeNode {
+        TreeNode(const std::vector<Object>& objects)
+        : split_dimension_(0), depth_(0) {
+            int dim = Object::GetDimension();
+
+            std::array<float, Object::GetDimension()> root_point_max;
+            std::array<float, Object::GetDimension()> root_point_min;
+            root_point_max.fill(-INITIAL_LIMIT);
+            root_point_min.fill(INITIAL_LIMIT);
+
+            for (const Object& obj : objects) {
+                std::array<float, Object::GetDimension()> point_max = obj.GetPointMax();
+                std::array<float, Object::GetDimension()> point_min = obj.GetPointMin();
+
+                for (size_t d = 0; d < dim; ++d) {
+                    if (root_point_max[d] < point_max[d]) {
+                        root_point_max[d] = point_max[d];
+                    }
+                    if (root_point_min[d] > point_min[d]) {
+                        root_point_min[d] = point_min[d];
+                    }
+                }
+            }
+
+            point_max_ = root_point_max;
+            point_min_ = root_point_min;
+
+            objects_.reserve(objects.size());
+            for (size_t obj = 0; obj < objects.size(); ++obj) {
+                objects_.push_back(obj);
+            }
+        }
+
         TreeNode(size_t split_dimension,
                  const std::array<float, Object::GetDimension()>& point_max,
                  const std::array<float, Object::GetDimension()>& point_min,
-                 std::vector<size_t>&& objects) :
+                 std::vector<size_t>&& objects, int depth = -1) :
                  split_dimension_(split_dimension),
                  left_(nullptr), right_(nullptr),
                  point_max_(point_max), point_min_(point_min),
-                 objects_(std::move(objects)) {
+                 objects_(std::move(objects)), depth_(depth){
         }
 
         bool IsLeaf() const {
@@ -134,11 +179,11 @@ private:
             return space;
         }
 
-        const TreeNode* GetLeft() const {
+        TreeNode* GetLeft() const {
             return left_.get();
         }
 
-        const TreeNode* GetRight() const {
+        TreeNode* GetRight() const {
             return right_.get();
         }
 
@@ -156,147 +201,171 @@ private:
         }
 
         size_t split_dimension_;
-
         std::unique_ptr<TreeNode> left_;
+
         std::unique_ptr<TreeNode> right_;
+        std::array<float, Object::GetDimension()> point_max_;
 
-        const std::array<float, Object::GetDimension()> point_max_;
-        const std::array<float, Object::GetDimension()> point_min_;
-
+        std::array<float, Object::GetDimension()> point_min_;
         std::vector<size_t> objects_;
+
+        int depth_;
     };
 
 private:
-    KDTree(std::vector<TreeNode>&& objects)
-    : objects_(std::move(objects)), root_(std::make_unique<TreeNode>()), dim_(Object::GetDimension()), k_(3) {
-        root_->split_dimension_ = 0;
+    std::array<float, Object::GetDimension()> GetMaxLimit(const std::vector<size_t>& arr) const {
+        std::array<float, Object::GetDimension()> res;
+        res.fill(-INITIAL_LIMIT);
 
-        std::array<float, Object::GetDimension()> root_point_max;
-        std::array<float, Object::GetDimension()> root_point_min;
-        root_point_max.fill(-INITIAL_LIMIT);
-        root_point_min.fill(INITIAL_LIMIT);
-
-        for (const Object& obj : objects_) {
-            std::array<float, Object::GetDimension()> point_max = obj.GetPointMax();
-            std::array<float, Object::GetDimension()> point_min = obj.GetPointMin();
-
-            for (size_t d = 0; d < dim_; ++d) {
-                if (root_point_max[d] < point_max[d]) {
-                    root_point_max[d] = point_max[d];
-                }
-                if (root_point_min[d] > point_min[d]) {
-                    root_point_min[d] = point_min[d];
+        for (size_t ind : arr) {
+            for (int dim = 0; dim < dim_; ++dim) {
+                auto val = objects_[ind].GetPointMax()[dim];
+                if (res[dim] < val) {
+                    res[dim] = val;
                 }
             }
         }
 
-        root_->point_max_ = root_point_max;
-        root_->point_min_ = root_point_min;
-
-        root_->objects_.reserve(objects_.size());
-        for (size_t obj = 0; obj < objects_.size(); ++obj) {
-            root_->objects_.push_back(obj);
-        }
+        return res;
     }
 
-    std::pair<TreeNode*, TreeNode*> SliceLeaf(TreeNode* leaf, const SurfaceAreaHeuristic& sah_func) {
-        std::vector<int> a_high(sections_amount_);
-        std::vector<int> a_low(sections_amount_);
+    std::array<float, Object::GetDimension()> GetMinLimit(const std::vector<size_t>& arr) const {
+        std::array<float, Object::GetDimension()> res;
+        res.fill(INITIAL_LIMIT);
 
-        const float max_limit = leaf->point_max_[leaf->split_dimension_];
-        const float min_limit = leaf->point_min_[leaf->split_dimension_];
-        const float step = (max_limit - min_limit) / sections_amount_;
-
-        for (size_t obj : leaf->objects_) {
-            float coord_max = objects_[obj].GetPointMax()[leaf->split_dimension_];
-            float coord_min = objects_[obj].GetPointMin()[leaf->split_dimension_];
-
-            for (size_t section = 0; section < sections_amount_; ++section) {
-                if ((coord_max > (min_limit + static_cast<float>(section * step)))
-                &&  (coord_max < (min_limit + static_cast<float>(section * (step + 1))))) {
-                    a_high[section] += 1;
-                }
-
-                if ((coord_min > (min_limit + static_cast<float>(section * step)))
-                &&  (coord_min < (min_limit + static_cast<float>(section * (step + 1))))) {
-                    a_low[section] += 1;
+        for (size_t ind : arr) {
+            for (int dim = 0; dim < dim_; ++dim) {
+                auto val = objects_[ind].GetPointMin()[dim];
+                if (res[dim] > val) {
+                    res[dim] = val;
                 }
             }
         }
 
-        for (size_t section = 1; section < sections_amount_; ++section) {
-            a_high[sections_amount_ - 1 - section] += a_high[sections_amount_ - section];
-            a_low[section] += a_low[section - 1];
-        }
+        return res;
+    }
 
-        // Surface Area Heuristic time!
-        // Search for the most suitable area split
-        float space_left = 0;
-        float space_right = max_limit - min_limit;
-        const float total_space = space_right;
+//    std::pair<TreeNode*, TreeNode*> SliceLeafSAH(TreeNode* leaf, const SurfaceAreaHeuristic& sah_func) {
+//        std::vector<int> a_high(sections_amount_);
+//        std::vector<int> a_low(sections_amount_);
+//
+//        const float max_limit = leaf->point_max_[leaf->split_dimension_];
+//        const float min_limit = leaf->point_min_[leaf->split_dimension_];
+//        const float step = (max_limit - min_limit) / sections_amount_;
+//
+//        for (size_t obj : leaf->objects_) {
+//            float coord_max = objects_[obj].GetPointMax()[leaf->split_dimension_];
+//            float coord_min = objects_[obj].GetPointMin()[leaf->split_dimension_];
+//
+//            for (size_t section = 0; section < sections_amount_; ++section) {
+//                if ((coord_max > (min_limit + static_cast<float>(section * step)))
+//                &&  (coord_max < (min_limit + static_cast<float>(section * (step + 1))))) {
+//                    a_high[section] += 1;
+//                }
+//
+//                if ((coord_min > (min_limit + static_cast<float>(section * step)))
+//                &&  (coord_min < (min_limit + static_cast<float>(section * (step + 1))))) {
+//                    a_low[section] += 1;
+//                }
+//            }
+//        }
+//
+//        for (size_t section = 1; section < sections_amount_; ++section) {
+//            a_high[sections_amount_ - 1 - section] += a_high[sections_amount_ - section];
+//            a_low[section] += a_low[section - 1];
+//        }
+//
+//        // Surface Area Heuristic time!
+//        // Search for the most suitable area split
+//        float space_left = 0;
+//        float space_right = max_limit - min_limit;
+//        const float total_space = space_right;
+//
+//        int min_pos = 1;
+//        float min_val = INITIAL_LIMIT;
+//        bool is_worth_splitting = false;
+//        for (int pos = 1; pos < sections_amount_; ++pos) {
+//            space_left += step;
+//            space_right -= step;
+//
+//            // This value is equal to the amount of elements which are present on the both sides
+//            const int elements_everywhere = leaf->objects_.size() - a_low[pos] + a_high[pos - 1];
+//
+//            const float val = sah_func(space_left, space_right, total_space, a_high[pos - 1] + elements_everywhere,
+//                                                                        a_low[pos] + elements_everywhere);
+//
+//            if (sah_func(leaf->objects_.size()) >= val) {
+//                is_worth_splitting = true;
+//            }
+//
+//            if (val < min_val) {
+//                min_pos = pos;
+//                min_val = val;
+//            }
+//        }
+//        if (!is_worth_splitting) {
+//            return {nullptr, nullptr};
+//        }
+//
+//        const float split_limit = min_limit + step * min_pos;
+//
+//        // Once it is found objects must be split
+//        const int elements_everywhere = leaf->objects_.size() - a_low[min_pos] + a_high[min_pos - 1];
+//        std::vector<size_t> left_objects;
+//        std::vector<size_t> right_objects;
+//        left_objects.reserve((a_high[min_pos - 1] + elements_everywhere));
+//        right_objects.reserve(a_low[min_pos] + elements_everywhere);
+//
+//        for (size_t obj : leaf->objects_) {
+//            const float coord_max = objects_[obj].GetPointMax()[leaf->split_dimension_];
+//            const float coord_min = objects_[obj].GetPointMin()[leaf->split_dimension_];
+//
+//            if (coord_max < split_limit) {
+//                // left side
+//                left_objects.push_back(obj);
+//            } else if (coord_min > split_limit) {
+//                // right_side
+//                right_objects.push_back(obj);
+//            } else {
+//                // on the edge
+//                left_objects.push_back(obj);
+//                right_objects.push_back(obj);
+//            }
+//        }
+//
+//        std::array<float, Object::GetDimension()> left_max = leaf->point_max_;
+//        std::array<float, Object::GetDimension()> left_min = leaf->point_min_;
+//        left_max[leaf->split_dimension_] = split_limit;
+//
+//        std::array<float, Object::GetDimension()> right_max = leaf->point_max_;
+//        std::array<float, Object::GetDimension()> right_min = leaf->point_min_;
+//        right_min[leaf->split_dimension_] = split_limit;
+//
+//        leaf->left_ = std::make_unique<TreeNode>((leaf->split_dimension_ + 1) % dim_, left_max, left_min, std::move(left_objects));
+//        leaf->right_ = std::make_unique<TreeNode>((leaf->split_dimension_ + 1) % dim_, right_max, right_min, std::move(right_objects));
+//        leaf->objects_.clear();
+//
+//        return {leaf->left_.get(), leaf->right_.get()};
+//    }
 
-        int min_pos = 1;
-        float min_val = INITIAL_LIMIT;
-        bool is_worth_splitting = false;
-        for (int pos = 1; pos < sections_amount_; ++pos) {
-            space_left += step;
-            space_right -= step;
-
-            // This value is equal to the amount of elements which are present on the both sides
-            const int elements_everywhere = leaf->objects_.size() - a_low[pos] + a_high[pos - 1];
-
-            const float val = sah_func(space_left, space_right, total_space, a_high[pos - 1] + elements_everywhere,
-                                                                        a_low[pos] + elements_everywhere);
-
-            if (sah_func(leaf->objects_.size()) >= val) {
-                is_worth_splitting = true;
-            }
-
-            if (val < min_val) {
-                min_pos = pos;
-                min_val = val;
-            }
-        }
-        if (!is_worth_splitting) {
+    std::pair<TreeNode*, TreeNode*> SliceLeafMedian(TreeNode* leaf, int max_depth) {
+        if ((max_depth <= leaf->depth_) || (leaf->objects_.size() <= 1)) {
             return {nullptr, nullptr};
         }
 
-        const float split_limit = min_limit + step * min_pos;
+        auto comparator = [this, dim = leaf->split_dimension_](size_t left, size_t right) {
+            return objects_[left].GetPointMax()[dim] < objects_[right].GetPointMax()[dim];
+        };
+        std::sort(leaf->objects_.begin(), leaf->objects_.end(), comparator);
 
-        // Once it is found objects must be split
-        const int elements_everywhere = leaf->objects_.size() - a_low[min_pos] + a_high[min_pos - 1];
-        std::vector<size_t> left_objects;
-        std::vector<size_t> right_objects;
-        left_objects.reserve((a_high[min_pos - 1] + elements_everywhere));
-        right_objects.reserve(a_low[min_pos] + elements_everywhere);
+        auto median = leaf->objects_.begin() + (leaf->objects_.size() / 2);
+        std::vector<size_t> left_objects(leaf->objects_.begin(), median);
+        std::vector<size_t> right_objects(median, leaf->objects_.end());
 
-        for (size_t obj : leaf->objects_) {
-            const float coord_max = objects_[obj].GetPointMax()[leaf->split_dimension_];
-            const float coord_min = objects_[obj].GetPointMin()[leaf->split_dimension_];
-
-            if (coord_max < split_limit) {
-                // left side
-                left_objects.push_back(obj);
-            } else if (coord_min > split_limit) {
-                // right_side
-                right_objects.push_back(obj);
-            } else {
-                // on the edge
-                left_objects.push_back(obj);
-                right_objects.push_back(obj);
-            }
-        }
-
-        std::array<float, Object::GetDimension()> left_max = leaf->point_max_;
-        std::array<float, Object::GetDimension()> left_min = leaf->point_min_;
-        left_max[leaf->split_dimension_] = split_limit;
-
-        std::array<float, Object::GetDimension()> right_max = leaf->point_max_;
-        std::array<float, Object::GetDimension()> right_min = leaf->point_min_;
-        right_min[leaf->split_dimension_] = split_limit;
-
-        leaf->left_ = std::make_unique<TreeNode>((leaf->split_dimension_ + 1) % dim_, left_max, left_min, std::move(left_objects));
-        leaf->right_ = std::make_unique<TreeNode>((leaf->split_dimension_ + 1) % dim_, right_max, right_min, std::move(right_objects));
+        leaf->left_ = std::make_unique<TreeNode>((leaf->split_dimension_ + 1) % dim_, GetMaxLimit(left_objects),
+                                                 GetMinLimit(left_objects), std::move(left_objects), leaf->depth_ + 1);
+        leaf->right_ = std::make_unique<TreeNode>((leaf->split_dimension_ + 1) % dim_, GetMaxLimit(right_objects),
+                                                  GetMinLimit(right_objects), std::move(right_objects), leaf->depth_ + 1);
         leaf->objects_.clear();
 
         return {leaf->left_.get(), leaf->right_.get()};
@@ -323,21 +392,22 @@ private:
 template<class Object>
 class KDTreeBuilder {
 public:
-    KDTreeBuilder() : sah_func_(), tree_(nullptr) {
+    KDTreeBuilder(SplitType split_type, int max_depth = 1)
+    : sah_func_(), tree_(nullptr), split_type_(split_type), max_depth_(max_depth) {
     }
 
     void LoadObjects(std::vector<Object>&& objects) {
-        tree_ = KDTree<Object>(std::move(objects));
+        tree_ = std::make_unique<KDTree<Object>>(std::move(objects));
     }
 
     std::unique_ptr<KDTree<Object>>&& BuildTree() {
         std::queue<class KDTree<Object>::TreeNode *> queue;
-        queue.push(tree_.root_.get());
+        queue.push(tree_->root_.get());
 
         while(!queue.empty()) {
-            class KDTree<Object>::TreeNode* node = queue.back();
+            class KDTree<Object>::TreeNode* node = queue.front();
             std::pair<class KDTree<Object>::TreeNode*, class KDTree<Object>::TreeNode*> new_nodes =
-                    tree_.SliceLeaf(node, sah_func_);
+                    tree_->SliceLeafMedian(node, max_depth_);
 
             // a bit excessive but just in case
             if ((new_nodes.first != nullptr) && (new_nodes.second != nullptr)) {
@@ -348,17 +418,16 @@ public:
             queue.pop();
         }
 
-
-
         return std::move(tree_);
     }
     
     KDTree<Object>&& LoadFromFile(const std::string& filename);
 
 private:
-
     const SurfaceAreaHeuristic sah_func_;
     std::unique_ptr<KDTree<Object>> tree_;
+    SplitType split_type_;
+    int max_depth_;
 };
 
 #endif //KDTREE_KD_TREE_H
