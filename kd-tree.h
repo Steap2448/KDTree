@@ -66,6 +66,12 @@ public:
 
     bool SaveToFile(const std::string& filename) const;
 
+    const std::vector<const Object*> SearchClosest(const Object& obj, float eps) const {
+        std::array<float, Object::GetDimension()> eps_array;
+        eps_array.fill(eps);
+        return SearchClosest(obj, eps_array);
+    }
+
     const std::vector<const Object*> SearchClosest(const Object& obj,
                                              const std::array<float, Object::GetDimension()>& eps) const {
         std::queue<TreeNode*> queue;
@@ -100,14 +106,14 @@ public:
             queue.pop();
         }
 
-        if (result.size() <= k_) {
-            return result;
-        }
-
         auto comp = [&obj](const Object* left, const Object* right) {
             return left->GetDistanceTo(obj) < right->GetDistanceTo(obj);
         };
         std::sort(result.begin(), result.end(), comp);
+
+        if (result.size() <= k_) {
+            return result;
+        }
 
         result.resize(k_);
 
