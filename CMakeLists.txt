@@ -8,7 +8,6 @@ add_subdirectory(googletest)
 include_directories(.)
 
 add_executable(KDTree
-        kd-tree.cpp
         kd-tree.h
         main.cpp)
 

@@ -12,16 +12,12 @@ public:
     Number(float num) : val_(num) {
     };
 
-    std::array<float, 1> GetPointMax() const override {
-        return {val_};
-    }
-
-    std::array<float, 1> GetPointMin() const override {
+    std::array<float, 1> GetPoint() const override {
         return {val_};
     }
 
     float GetDistanceTo(const KDTreePlaceable<1>& object) const override {
-        return std::abs(val_ - object.GetPointMax()[0]);
+        return std::abs(val_ - object.GetPoint()[0]);
     }
 
     float Val() const {
@@ -97,18 +93,14 @@ public:
     Point(float x, float y) : coord_{x, y} {
     };
 
-    std::array<float, 2> GetPointMax() const override {
+    std::array<float, 2> GetPoint() const override {
         return coord_;
-    }
-
-    std::array<float, 2> GetPointMin() const override {
-        return GetPointMax();
     }
 
     float GetDistanceTo(const KDTreePlaceable<2>& object) const override {
         float dist = 0;
         for (int ind = 0; ind < 2; ++ind) {
-            dist += std::pow(coord_[ind] - object.GetPointMax()[ind], 2);
+            dist += std::pow(coord_[ind] - object.GetPoint()[ind], 2);
         }
         return std::sqrt(dist);
     }
@@ -133,8 +125,8 @@ std::unique_ptr<KDTree<Point>> BuildTreePoint(int seed, int amount) {
 }
 
 void AssertPoint(const Point& point, std::array<float, 2> expected, float esp) {
-    EXPECT_NEAR(point.GetPointMax()[0], expected[0], esp);
-    EXPECT_NEAR(point.GetPointMax()[1], expected[1], esp);
+    EXPECT_NEAR(point.GetPoint()[0], expected[0], esp);
+    EXPECT_NEAR(point.GetPoint()[1], expected[1], esp);
 }
 
 TEST(TestPoint, Simple) {
@@ -181,18 +173,14 @@ public:
     Quad(float first, float second, float third, float forth): val_({first, second, third, forth}) {
     }
 
-    std::array<float, 4> GetPointMax() const override {
+    std::array<float, 4> GetPoint() const override {
         return val_;
-    }
-
-    std::array<float, 4> GetPointMin() const override {
-        return GetPointMax();
     }
 
     float GetDistanceTo(const KDTreePlaceable<4>& object) const override {
         float dist = 0;
         for (int ind = 0; ind < 4; ++ind) {
-            dist += std::pow(val_[ind] - object.GetPointMax()[ind], 2);
+            dist += std::pow(val_[ind] - object.GetPoint()[ind], 2);
         }
         return std::sqrt(dist);
     }
@@ -223,7 +211,7 @@ Quad GetRandomQuad(std::mt19937& gen, const std::vector<Quad>& quads, float eps)
         err_array[ind] = err_dist(gen);
     }
 
-    const std::array<float, 4> target = quads[pos].GetPointMax();
+    const std::array<float, 4> target = quads[pos].GetPoint();
     return Quad(target[0] + err_array[0], target[1] + err_array[1], target[2] + err_array[2], target[3] + err_array[3]);
 }
 
@@ -243,16 +231,16 @@ std::unique_ptr<KDTree<Quad>> BuildTreeQuads(std::vector<Quad>&& quads, int leaf
 }
 
 inline void AssertQuads(const std::vector<Quad>& expected, const std::vector<const Quad*>& actual, float esp) {
-    EXPECT_NEAR(expected[0].GetPointMax()[0], actual[0]->GetPointMax()[0], esp);
-    EXPECT_NEAR(expected[0].GetPointMax()[1], actual[0]->GetPointMax()[1], esp);
-    EXPECT_NEAR(expected[0].GetPointMax()[2], actual[0]->GetPointMax()[2], esp);
-    EXPECT_NEAR(expected[0].GetPointMax()[3], actual[0]->GetPointMax()[3], esp);
+    EXPECT_NEAR(expected[0].GetPoint()[0], actual[0]->GetPoint()[0], esp);
+    EXPECT_NEAR(expected[0].GetPoint()[1], actual[0]->GetPoint()[1], esp);
+    EXPECT_NEAR(expected[0].GetPoint()[2], actual[0]->GetPoint()[2], esp);
+    EXPECT_NEAR(expected[0].GetPoint()[3], actual[0]->GetPoint()[3], esp);
 }
 
 TEST(Quads, Stress) {
     const int tests_amount = 100;
     std::mt19937 gen(343);
-    std::uniform_int_distribution<int> amount_dist(2, 100000);
+    std::uniform_int_distribution<int> amount_dist(100, 20000);
     std::uniform_real_distribution<float> err_dist(0, 10);
 
 
@@ -274,7 +262,7 @@ TEST(Quads, Stress) {
         int search_amount = amount < 10 ? amount : 10;
         tree->SetK(search_amount);
 
-        auto res = tree->SearchClosest(target, 100);
+        auto res = tree->SearchClosest(target, err * 2);
         auto tree_search_finish = std::chrono::steady_clock::now();
         auto tree_search_duration = std::chrono::duration_cast<std::chrono::microseconds>(tree_search_finish - tree_build_finish);
 
@@ -283,6 +271,7 @@ TEST(Quads, Stress) {
         auto tree_search_duration_us = tree_search_duration.count();
 
 //        std::cerr << "Amount:      " << amount << '\n';
+//        std::cerr << "Size:      " << sizeof(*tree.get()) << '\n';
 //        std::cerr << "Raw sort:    " << raw_sort_duration_us << " us\n";
 //        std::cerr << "Tree build:  " << tree_build_duration_us << " us\n";
 //        std::cerr << "Tree search: " << tree_search_duration_us << " us\n\n";

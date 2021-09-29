@@ -11,11 +11,18 @@
 #include <vector>
 
 const float INITIAL_LIMIT = INT64_MAX;
+
+template<class Object>
+class KDTree;
+
+template<class Object>
+class KDTreeBuilder;
+
 template <int Dimension>
 class KDTreePlaceable {
 public:
-    virtual std::array<float, Dimension> GetPointMax() const = 0;
-    virtual std::array<float, Dimension> GetPointMin() const = 0;
+    virtual std::array<float, Dimension> GetPoint() const = 0;
+
     virtual float GetDistanceTo(const KDTreePlaceable<Dimension>& object) const = 0;
 
     constexpr static int GetDimension() {
@@ -27,9 +34,6 @@ enum class SplitType {
     SAH,
     Median
 };
-
-template<class Object>
-class KDTreeBuilder;
 
 class SurfaceAreaHeuristic {
 public:
@@ -136,15 +140,14 @@ private:
             root_point_min.fill(INITIAL_LIMIT);
 
             for (const Object& obj : objects) {
-                std::array<float, Object::GetDimension()> point_max = obj.GetPointMax();
-                std::array<float, Object::GetDimension()> point_min = obj.GetPointMin();
+                std::array<float, Object::GetDimension()> point = obj.GetPoint();
 
                 for (size_t d = 0; d < dim; ++d) {
-                    if (root_point_max[d] < point_max[d]) {
-                        root_point_max[d] = point_max[d];
+                    if (root_point_max[d] < point[d]) {
+                        root_point_max[d] = point[d];
                     }
-                    if (root_point_min[d] > point_min[d]) {
-                        root_point_min[d] = point_min[d];
+                    if (root_point_min[d] > point[d]) {
+                        root_point_min[d] = point[d];
                     }
                 }
             }
@@ -195,11 +198,10 @@ private:
 
         bool IsCovering(const Object& obj,
                         const std::array<float, Object::GetDimension()>& eps) const {
-            const std::array<float, Object::GetDimension()> point_max = obj.GetPointMax();
-            const std::array<float, Object::GetDimension()> point_min = obj.GetPointMin();
+            const std::array<float, Object::GetDimension()> point = obj.GetPoint();
             for (size_t dim = 0; dim < Object::GetDimension(); ++dim) {
-                if (point_min[dim] < (point_min_[dim] - eps[dim])
-                || point_max[dim] > (point_max_[dim] + eps[dim])) {
+                if (point[dim] < (point_min_[dim] - eps[dim])
+                || point[dim] > (point_max_[dim] + eps[dim])) {
                     return false;
                 }
             }
@@ -225,7 +227,7 @@ private:
 
         for (size_t ind : arr) {
             for (int dim = 0; dim < dim_; ++dim) {
-                auto val = objects_[ind].GetPointMax()[dim];
+                auto val = objects_[ind].GetPoint()[dim];
                 if (res[dim] < val) {
                     res[dim] = val;
                 }
@@ -241,7 +243,7 @@ private:
 
         for (size_t ind : arr) {
             for (int dim = 0; dim < dim_; ++dim) {
-                auto val = objects_[ind].GetPointMin()[dim];
+                auto val = objects_[ind].GetPoint()[dim];
                 if (res[dim] > val) {
                     res[dim] = val;
                 }
@@ -251,116 +253,13 @@ private:
         return res;
     }
 
-//    std::pair<TreeNode*, TreeNode*> SliceLeafSAH(TreeNode* leaf, const SurfaceAreaHeuristic& sah_func) {
-//        std::vector<int> a_high(sections_amount_);
-//        std::vector<int> a_low(sections_amount_);
-//
-//        const float max_limit = leaf->point_max_[leaf->split_dimension_];
-//        const float min_limit = leaf->point_min_[leaf->split_dimension_];
-//        const float step = (max_limit - min_limit) / sections_amount_;
-//
-//        for (size_t obj : leaf->objects_) {
-//            float coord_max = objects_[obj].GetPointMax()[leaf->split_dimension_];
-//            float coord_min = objects_[obj].GetPointMin()[leaf->split_dimension_];
-//
-//            for (size_t section = 0; section < sections_amount_; ++section) {
-//                if ((coord_max > (min_limit + static_cast<float>(section * step)))
-//                &&  (coord_max < (min_limit + static_cast<float>(section * (step + 1))))) {
-//                    a_high[section] += 1;
-//                }
-//
-//                if ((coord_min > (min_limit + static_cast<float>(section * step)))
-//                &&  (coord_min < (min_limit + static_cast<float>(section * (step + 1))))) {
-//                    a_low[section] += 1;
-//                }
-//            }
-//        }
-//
-//        for (size_t section = 1; section < sections_amount_; ++section) {
-//            a_high[sections_amount_ - 1 - section] += a_high[sections_amount_ - section];
-//            a_low[section] += a_low[section - 1];
-//        }
-//
-//        // Surface Area Heuristic time!
-//        // Search for the most suitable area split
-//        float space_left = 0;
-//        float space_right = max_limit - min_limit;
-//        const float total_space = space_right;
-//
-//        int min_pos = 1;
-//        float min_val = INITIAL_LIMIT;
-//        bool is_worth_splitting = false;
-//        for (int pos = 1; pos < sections_amount_; ++pos) {
-//            space_left += step;
-//            space_right -= step;
-//
-//            // This value is equal to the amount of elements which are present on the both sides
-//            const int elements_everywhere = leaf->objects_.size() - a_low[pos] + a_high[pos - 1];
-//
-//            const float val = sah_func(space_left, space_right, total_space, a_high[pos - 1] + elements_everywhere,
-//                                                                        a_low[pos] + elements_everywhere);
-//
-//            if (sah_func(leaf->objects_.size()) >= val) {
-//                is_worth_splitting = true;
-//            }
-//
-//            if (val < min_val) {
-//                min_pos = pos;
-//                min_val = val;
-//            }
-//        }
-//        if (!is_worth_splitting) {
-//            return {nullptr, nullptr};
-//        }
-//
-//        const float split_limit = min_limit + step * min_pos;
-//
-//        // Once it is found objects must be split
-//        const int elements_everywhere = leaf->objects_.size() - a_low[min_pos] + a_high[min_pos - 1];
-//        std::vector<size_t> left_objects;
-//        std::vector<size_t> right_objects;
-//        left_objects.reserve((a_high[min_pos - 1] + elements_everywhere));
-//        right_objects.reserve(a_low[min_pos] + elements_everywhere);
-//
-//        for (size_t obj : leaf->objects_) {
-//            const float coord_max = objects_[obj].GetPointMax()[leaf->split_dimension_];
-//            const float coord_min = objects_[obj].GetPointMin()[leaf->split_dimension_];
-//
-//            if (coord_max < split_limit) {
-//                // left side
-//                left_objects.push_back(obj);
-//            } else if (coord_min > split_limit) {
-//                // right_side
-//                right_objects.push_back(obj);
-//            } else {
-//                // on the edge
-//                left_objects.push_back(obj);
-//                right_objects.push_back(obj);
-//            }
-//        }
-//
-//        std::array<float, Object::GetDimension()> left_max = leaf->point_max_;
-//        std::array<float, Object::GetDimension()> left_min = leaf->point_min_;
-//        left_max[leaf->split_dimension_] = split_limit;
-//
-//        std::array<float, Object::GetDimension()> right_max = leaf->point_max_;
-//        std::array<float, Object::GetDimension()> right_min = leaf->point_min_;
-//        right_min[leaf->split_dimension_] = split_limit;
-//
-//        leaf->left_ = std::make_unique<TreeNode>((leaf->split_dimension_ + 1) % dim_, left_max, left_min, std::move(left_objects));
-//        leaf->right_ = std::make_unique<TreeNode>((leaf->split_dimension_ + 1) % dim_, right_max, right_min, std::move(right_objects));
-//        leaf->objects_.clear();
-//
-//        return {leaf->left_.get(), leaf->right_.get()};
-//    }
-
     std::pair<TreeNode*, TreeNode*> SliceLeafMedian(TreeNode* leaf, int max_depth) {
         if ((max_depth <= leaf->depth_) || (leaf->objects_.size() <= 1)) {
             return {nullptr, nullptr};
         }
 
         auto comparator = [this, dim = leaf->split_dimension_](size_t left, size_t right) {
-            return objects_[left].GetPointMax()[dim] < objects_[right].GetPointMax()[dim];
+            return objects_[left].GetPoint()[dim] < objects_[right].GetPoint()[dim];
         };
         std::sort(leaf->objects_.begin(), leaf->objects_.end(), comparator);
 
