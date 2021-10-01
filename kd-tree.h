@@ -108,6 +108,8 @@ public:
     return result;
   }
 
+  size_t GetSize() const { return objects_.size(); }
+
 private:
   struct TreeNode {
     TreeNode(const std::vector<Object> &objects)
@@ -253,7 +255,7 @@ private:
     return {leaf->left_.get(), leaf->right_.get()};
   }
 
-  TreeNode *GetRoot() const { return root_.get(); }
+  const TreeNode *GetRoot() const { return root_.get(); }
 
 private:
   friend class KDTreeBuilder<Object>;

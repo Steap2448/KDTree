@@ -127,6 +127,7 @@ inline void AssertPoint(const Point& point, std::array<float, 2> expected, float
 
 TEST(TestPoint, Simple) {
     auto tree = BuildTreePoint(343, 10);
+    ASSERT_EQ(tree->GetSize(), 10);
 
     auto res = tree->SearchClosest(Point(-7, -6), 1, 1);
     ASSERT_EQ(res.size(), 1);
