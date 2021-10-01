@@ -44,19 +44,16 @@ std::unique_ptr<KDTree<Number>> BuildTreeNumber(int step) {
 TEST(TestNumber, Simple) {
     auto tree = BuildTreeNumber(2);
 
-    tree->SetK(2);
-    auto res = tree->SearchClosest(Number(0.9), {3});
+    auto res = tree->SearchClosest(Number(0.9), 3, 2);
     ASSERT_EQ(res.size(), 2);
     ASSERT_EQ(res[0]->Val(), 0);
     ASSERT_EQ(res[1]->Val(), 2);
 
-    tree->SetK(2);
-    res = tree->SearchClosest(Number(5.5), {0.5});
+    res = tree->SearchClosest(Number(5.5), 0.5, 2);
     ASSERT_EQ(res.size(), 1);
     ASSERT_EQ(res[0]->Val(), 6);
 
-    tree->SetK(2);
-    res = tree->SearchClosest(Number(4.9), {5});
+    res = tree->SearchClosest(Number(4.9), 5, 2);
     ASSERT_EQ(res.size(), 2);
     ASSERT_EQ(res[0]->Val(), 4);
     ASSERT_EQ(res[1]->Val(), 6);
@@ -65,22 +62,21 @@ TEST(TestNumber, Simple) {
 TEST(TestNumber, Empty) {
     auto tree = BuildTreeNumber(5);
 
-    auto res = tree->SearchClosest(Number(3), {1});
+    auto res = tree->SearchClosest(Number(3), 1, 3);
     ASSERT_EQ(res.size(), 0);
 }
 
 TEST(TestNumber, Order) {
     auto tree = BuildTreeNumber(1);
 
-    tree->SetK(10);
-    auto res = tree->SearchClosest(Number(2.9), {10});
+    auto res = tree->SearchClosest(Number(2.9), 10, 10);
     ASSERT_EQ(res.size(), 10);
     ASSERT_EQ(res[0]->Val(), 3);
     ASSERT_EQ(res[1]->Val(), 2);
     ASSERT_EQ(res[2]->Val(), 4);
     ASSERT_EQ(res[3]->Val(), 1);
 
-    res = tree->SearchClosest(Number(7.1), {10});
+    res = tree->SearchClosest(Number(7.1), 10, 10);
     ASSERT_EQ(res.size(), 10);
     ASSERT_EQ(res[0]->Val(), 7);
     ASSERT_EQ(res[1]->Val(), 8);
@@ -124,7 +120,7 @@ std::unique_ptr<KDTree<Point>> BuildTreePoint(int seed, int amount) {
     return builder.BuildTree();
 }
 
-void AssertPoint(const Point& point, std::array<float, 2> expected, float esp) {
+inline void AssertPoint(const Point& point, std::array<float, 2> expected, float esp) {
     EXPECT_NEAR(point.GetPoint()[0], expected[0], esp);
     EXPECT_NEAR(point.GetPoint()[1], expected[1], esp);
 }
@@ -132,8 +128,7 @@ void AssertPoint(const Point& point, std::array<float, 2> expected, float esp) {
 TEST(TestPoint, Simple) {
     auto tree = BuildTreePoint(343, 10);
 
-    tree->SetK(1);
-    auto res = tree->SearchClosest(Point(-7, -6), 1);
+    auto res = tree->SearchClosest(Point(-7, -6), 1, 1);
     ASSERT_EQ(res.size(), 1);
     AssertPoint(*res[0], {-7, -6}, 0.5);
 }
@@ -141,16 +136,14 @@ TEST(TestPoint, Simple) {
 TEST(TestPoint, Empty) {
     auto tree = BuildTreePoint(343, 10);
 
-    tree->SetK(10);
-    auto res = tree->SearchClosest(Point(0, 0), 1);
+    auto res = tree->SearchClosest(Point(0, 0), 1, 10);
     ASSERT_EQ(res.size(), 0);
 }
 
 TEST(TestPoint, Order) {
     auto tree = BuildTreePoint(343, 10);
 
-    tree->SetK(5);
-    auto res = tree->SearchClosest(Point(0, 0), 10);
+    auto res = tree->SearchClosest(Point(0, 0), 10, 5);
     ASSERT_EQ(res.size(), 5);
     AssertPoint(*res[0], {1.78, 3.13}, 0.01);
     AssertPoint(*res[1], {1.46, -5.22}, 0.01);
@@ -158,14 +151,25 @@ TEST(TestPoint, Order) {
     AssertPoint(*res[3], {7.29, -1.6}, 0.01);
     AssertPoint(*res[4], {-4.5, 8.42}, 0.01);
 
-    tree->SetK(10);
-    res = tree->SearchClosest(Point(0, 0), 10);
+    res = tree->SearchClosest(Point(0, 0), 10, 10);
     ASSERT_EQ(res.size(), 10);
     AssertPoint(*res[0], {1.78, 3.13}, 0.01);
     AssertPoint(*res[1], {1.46, -5.22}, 0.01);
     AssertPoint(*res[2], {-5.37, 2.92}, 0.01);
     AssertPoint(*res[3], {7.29, -1.6}, 0.01);
     AssertPoint(*res[4], {-4.5, 8.42}, 0.01);
+
+    auto target = Point(0, 0);
+    auto comparator = [&target](const Point& first, const Point& second) {
+        return first.GetDistanceTo(target) > second.GetDistanceTo(target);
+    };
+    res = tree->SearchClosest(target, 10, 10, comparator);
+    ASSERT_EQ(res.size(), 10);
+    AssertPoint(*res[9], {1.78, 3.13}, 0.01);
+    AssertPoint(*res[8], {1.46, -5.22}, 0.01);
+    AssertPoint(*res[7], {-5.37, 2.92}, 0.01);
+    AssertPoint(*res[6], {7.29, -1.6}, 0.01);
+    AssertPoint(*res[5], {-4.5, 8.42}, 0.01);
 }
 
 class Quad: public KDTreePlaceable<4> {
@@ -260,16 +264,15 @@ TEST(Quads, Stress) {
         auto tree_build_finish = std::chrono::steady_clock::now();
         auto tree_build_duration = std::chrono::duration_cast<std::chrono::microseconds>(tree_build_finish - tree_start);
         int search_amount = amount < 10 ? amount : 10;
-        tree->SetK(search_amount);
 
-        auto res = tree->SearchClosest(target, err * 2);
+        auto res = tree->SearchClosest(target, err * 2, search_amount);
         auto tree_search_finish = std::chrono::steady_clock::now();
         auto tree_search_duration = std::chrono::duration_cast<std::chrono::microseconds>(tree_search_finish - tree_build_finish);
 
-        auto raw_sort_duration_us = raw_sort_duration.count();
-        auto tree_build_duration_us = tree_build_duration.count();
-        auto tree_search_duration_us = tree_search_duration.count();
-
+//        auto raw_sort_duration_us = raw_sort_duration.count();
+//        auto tree_build_duration_us = tree_build_duration.count();
+//        auto tree_search_duration_us = tree_search_duration.count();
+//
 //        std::cerr << "Amount:      " << amount << '\n';
 //        std::cerr << "Size:      " << sizeof(*tree.get()) << '\n';
 //        std::cerr << "Raw sort:    " << raw_sort_duration_us << " us\n";
