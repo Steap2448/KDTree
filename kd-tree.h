@@ -35,10 +35,13 @@ public:
   explicit KDTree(std::vector<Object> &&objects)
       : objects_(std::move(objects)),
         root_(std::make_unique<TreeNode>(objects_)),
-        dim_(Object::GetDimension()) {}
+        dim_(Object::GetDimension()),
+        gap_{} {
+      gap_.fill(0);
+  }
 
   KDTree(KDTree &&tree)
-      : objects_(std::move(tree.objects_)), root_(tree.root_), dim_(tree.dim_) {
+      : objects_(std::move(tree.objects_)), root_(tree.root_), dim_(tree.dim_), gap_(tree.gap_) {
   }
 
   bool SaveToFile(const std::string &filename) const;
@@ -109,6 +112,10 @@ public:
   }
 
   size_t GetSize() const { return objects_.size(); }
+
+  std::array<float, Object::GetDimension()> GetGap() const {
+      return gap_;
+  }
 
 private:
   struct TreeNode {
@@ -252,6 +259,11 @@ private:
         GetMinLimit(right_objects), std::move(right_objects), leaf->depth_ + 1);
     leaf->objects_.clear();
 
+    float dim_gap = leaf->right_->point_min_[leaf->split_dimension_] - leaf->left_->point_max_[leaf->split_dimension_];
+    if (dim_gap > gap_[leaf->split_dimension_]) {
+        gap_[leaf->split_dimension_] = dim_gap;
+    }
+
     return {leaf->left_.get(), leaf->right_.get()};
   }
 
@@ -264,6 +276,7 @@ private:
   const std::vector<Object> objects_;
   std::unique_ptr<TreeNode> root_;
   size_t dim_;
+  std::array<float, Object::GetDimension()> gap_;
 };
 
 template <class Object> class KDTreeBuilder {
