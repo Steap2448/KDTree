@@ -20,9 +20,6 @@ template <int Dimension> class KDTreePlaceable {
 public:
   virtual std::array<float, Dimension> GetPoint() const = 0;
 
-  virtual float
-  GetDistanceTo(const KDTreePlaceable<Dimension> &object) const = 0;
-
   constexpr static int GetDimension() { return Dimension; }
 };
 
@@ -45,14 +42,6 @@ public:
   }
 
   bool SaveToFile(const std::string &filename) const;
-
-  std::vector<const Object *> SearchClosest(const Object &obj, float eps,
-                                                  int amount) const {
-    auto comp = [&obj](const Object& first, const Object& second) -> bool {
-        return first.GetDistanceTo(obj) < second.GetDistanceTo(obj);
-    };
-    return SearchClosest(obj, eps, amount, comp);
-  }
 
   std::vector<const Object *> SearchClosest(const Object &obj, float eps,
                                                   int amount, std::function<bool(const Object &, const Object &)> comparator) const {

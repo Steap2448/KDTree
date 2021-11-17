@@ -16,7 +16,7 @@ public:
         return {val_};
     }
 
-    float GetDistanceTo(const KDTreePlaceable<1>& object) const override {
+    float GetDistanceTo(const KDTreePlaceable<1>& object) const {
         return std::abs(val_ - object.GetPoint()[0]);
     }
 
@@ -44,16 +44,22 @@ std::unique_ptr<KDTree<Number>> BuildTreeNumber(int step) {
 TEST(TestNumber, Simple) {
     auto tree = BuildTreeNumber(2);
 
-    auto res = tree->SearchClosest(Number(0.9), 3, 2);
+    Number target(0.9);
+    auto cmp = [&target](const Number& first, const Number& second) {
+        return target.GetDistanceTo(first) < target.GetDistanceTo(second);
+    };
+    auto res = tree->SearchClosest(target, 3, 2, cmp);
     ASSERT_EQ(res.size(), 2);
     ASSERT_EQ(res[0]->Val(), 0);
     ASSERT_EQ(res[1]->Val(), 2);
 
-    res = tree->SearchClosest(Number(5.5), 0.5, 2);
+    target = Number(5.5);
+    res = tree->SearchClosest(target, 0.5, 2, cmp);
     ASSERT_EQ(res.size(), 1);
     ASSERT_EQ(res[0]->Val(), 6);
 
-    res = tree->SearchClosest(Number(4.9), 5, 2);
+    target = Number(4.9);
+    res = tree->SearchClosest(target, 5, 2, cmp);
     ASSERT_EQ(res.size(), 2);
     ASSERT_EQ(res[0]->Val(), 4);
     ASSERT_EQ(res[1]->Val(), 6);
@@ -62,21 +68,30 @@ TEST(TestNumber, Simple) {
 TEST(TestNumber, Empty) {
     auto tree = BuildTreeNumber(5);
 
-    auto res = tree->SearchClosest(Number(3), 1, 3);
+    Number target(3);
+    auto cmp = [&target](const Number& first, const Number& second) {
+        return target.GetDistanceTo(first) < target.GetDistanceTo(second);
+    };
+    auto res = tree->SearchClosest(target, 1, 3, cmp);
     ASSERT_EQ(res.size(), 0);
 }
 
 TEST(TestNumber, Order) {
     auto tree = BuildTreeNumber(1);
 
-    auto res = tree->SearchClosest(Number(2.9), 10, 10);
+    Number target(2.9);
+    auto cmp = [&target](const Number& first, const Number& second) {
+        return target.GetDistanceTo(first) < target.GetDistanceTo(second);
+    };
+    auto res = tree->SearchClosest(target, 10, 10, cmp);
     ASSERT_EQ(res.size(), 10);
     ASSERT_EQ(res[0]->Val(), 3);
     ASSERT_EQ(res[1]->Val(), 2);
     ASSERT_EQ(res[2]->Val(), 4);
     ASSERT_EQ(res[3]->Val(), 1);
 
-    res = tree->SearchClosest(Number(7.1), 10, 10);
+    target = Number(7.1);
+    res = tree->SearchClosest(target, 10, 10, cmp);
     ASSERT_EQ(res.size(), 10);
     ASSERT_EQ(res[0]->Val(), 7);
     ASSERT_EQ(res[1]->Val(), 8);
@@ -93,7 +108,7 @@ public:
         return coord_;
     }
 
-    float GetDistanceTo(const KDTreePlaceable<2>& object) const override {
+    float GetDistanceTo(const KDTreePlaceable<2>& object) const {
         float dist = 0;
         for (int ind = 0; ind < 2; ++ind) {
             dist += std::pow(coord_[ind] - object.GetPoint()[ind], 2);
@@ -129,7 +144,12 @@ TEST(TestPoint, Simple) {
     auto tree = BuildTreePoint(343, 10);
     ASSERT_EQ(tree->GetSize(), 10);
 
-    auto res = tree->SearchClosest(Point(-7, -6), 1, 1);
+    Point target(-7, -6);
+    auto cmp = [&target](const Point& first, const Point& second) {
+        return target.GetDistanceTo(first) < target.GetDistanceTo(second);
+    };
+
+    auto res = tree->SearchClosest(target, 1, 1, cmp);
     ASSERT_EQ(res.size(), 1);
     AssertPoint(*res[0], {-7, -6}, 0.5);
 }
@@ -137,14 +157,24 @@ TEST(TestPoint, Simple) {
 TEST(TestPoint, Empty) {
     auto tree = BuildTreePoint(343, 10);
 
-    auto res = tree->SearchClosest(Point(0, 0), 1, 10);
+    Point target(0, 0);
+    auto cmp = [&target](const Point& first, const Point& second) {
+        return target.GetDistanceTo(first) < target.GetDistanceTo(second);
+    };
+
+    auto res = tree->SearchClosest(target, 1, 10, cmp);
     ASSERT_EQ(res.size(), 0);
 }
 
 TEST(TestPoint, Order) {
     auto tree = BuildTreePoint(343, 10);
 
-    auto res = tree->SearchClosest(Point(0, 0), 10, 5);
+    Point target(0, 0);
+    auto cmp = [&target](const Point& first, const Point& second) {
+        return target.GetDistanceTo(first) < target.GetDistanceTo(second);
+    };
+
+    auto res = tree->SearchClosest(target, 10, 5, cmp);
     ASSERT_EQ(res.size(), 5);
     AssertPoint(*res[0], {1.78, 3.13}, 0.01);
     AssertPoint(*res[1], {1.46, -5.22}, 0.01);
@@ -152,7 +182,8 @@ TEST(TestPoint, Order) {
     AssertPoint(*res[3], {7.29, -1.6}, 0.01);
     AssertPoint(*res[4], {-4.5, 8.42}, 0.01);
 
-    res = tree->SearchClosest(Point(0, 0), 10, 10);
+    target = Point(0, 0);
+    res = tree->SearchClosest(Point(0, 0), 10, 10, cmp);
     ASSERT_EQ(res.size(), 10);
     AssertPoint(*res[0], {1.78, 3.13}, 0.01);
     AssertPoint(*res[1], {1.46, -5.22}, 0.01);
@@ -160,11 +191,11 @@ TEST(TestPoint, Order) {
     AssertPoint(*res[3], {7.29, -1.6}, 0.01);
     AssertPoint(*res[4], {-4.5, 8.42}, 0.01);
 
-    auto target = Point(0, 0);
-    auto comparator = [&target](const Point& first, const Point& second) {
+    target = Point(0, 0);
+    auto cmp2 = [&target](const Point& first, const Point& second) {
         return first.GetDistanceTo(target) > second.GetDistanceTo(target);
     };
-    res = tree->SearchClosest(target, 10, 10, comparator);
+    res = tree->SearchClosest(target, 10, 10, cmp2);
     ASSERT_EQ(res.size(), 10);
     AssertPoint(*res[9], {1.78, 3.13}, 0.01);
     AssertPoint(*res[8], {1.46, -5.22}, 0.01);
@@ -182,7 +213,7 @@ public:
         return val_;
     }
 
-    float GetDistanceTo(const KDTreePlaceable<4>& object) const override {
+    float GetDistanceTo(const KDTreePlaceable<4>& object) const {
         float dist = 0;
         for (int ind = 0; ind < 4; ++ind) {
             dist += std::pow(val_[ind] - object.GetPoint()[ind], 2);
@@ -266,7 +297,11 @@ TEST(Quads, Stress) {
         auto tree_build_duration = std::chrono::duration_cast<std::chrono::microseconds>(tree_build_finish - tree_start);
         int search_amount = amount < 10 ? amount : 10;
 
-        auto res = tree->SearchClosest(target, err * 2, search_amount);
+        auto cmp = [&target] (const Quad& first, const Quad& second) {
+            return target.GetDistanceTo(first) < target.GetDistanceTo(second);
+        };
+
+        auto res = tree->SearchClosest(target, err * 2, search_amount, cmp);
         auto tree_search_finish = std::chrono::steady_clock::now();
         auto tree_search_duration = std::chrono::duration_cast<std::chrono::microseconds>(tree_search_finish - tree_build_finish);
 
