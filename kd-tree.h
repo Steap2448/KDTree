@@ -118,6 +118,10 @@ public:
       return objects_.end();
   }
 
+  size_t size() const {
+      return objects_.size();
+  }
+
 private:
   struct TreeNode {
     TreeNode(const std::vector<Object> &objects)
