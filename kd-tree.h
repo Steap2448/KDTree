@@ -106,6 +106,18 @@ public:
       return gap_;
   }
 
+  const Object& operator[](size_t index) const {
+      return objects_[index];
+  }
+
+  auto begin() const {
+      return objects_.begin();
+  }
+
+  auto end() const {
+      return objects_.end();
+  }
+
 private:
   struct TreeNode {
     TreeNode(const std::vector<Object> &objects)
